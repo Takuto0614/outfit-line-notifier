@@ -1,0 +1,58 @@
+---
+title: outfit-line-notifier システム設計図
+---
+
+flowchart TD
+    subgraph Scheduler["⏰ スケジューラー (APScheduler)"]
+        S["毎朝7時に起動\ndaily_scheduler.py"]
+    end
+
+    subgraph Config["⚙️ 設定 (config.py)"]
+        UC["UserConfig\n名前 / 性別 / 年齢 / 身長\n好みスタイル / NG / 好きな色"]
+        LC["LocationConfig\n地域名 / 緯度 / 経度"]
+        LNC["LineConfig\nチャネルアクセストークン\nユーザーID"]
+        AC["AppConfig\n通知時刻 / OllamaモデルURL"]
+    end
+
+    subgraph Services["🔧 サービス層"]
+        WS["weather_service.py\n天気情報取得・整形"]
+        OS["outfit_service.py\nプロンプト生成\nLLMレスポンスパース"]
+        LLS["llm_service.py\nOllama HTTP API呼び出し"]
+        LS["line_service.py\nメッセージ整形\nLINE API送信"]
+    end
+
+    subgraph External["🌐 外部サービス"]
+        WA["Open-Meteo API\n天気 / 気温 / 湿度\n降水確率"]
+        OL["Ollama\nローカルLLM\nqwen2.5"]
+        LA["LINE Messaging API\nPush Message"]
+        LN["📱 ユーザーのLINE"]
+    end
+
+    subgraph Utils["🛠️ ユーティリティ"]
+        WC["weather_code.py\nWMOコード → 日本語変換"]
+    end
+
+    S -->|"処理開始"| WS
+    LC -->|"緯度 / 経度 / タイムゾーン"| WS
+    WS -->|"APIリクエスト"| WA
+    WA -->|"天気データ (JSON)"| WS
+    WC -->|"天気コード変換"| WS
+    WS -->|"整形済み天気情報"| OS
+
+    UC -->|"個人情報"| OS
+    OS -->|"プロンプト送信"| LLS
+    LLS -->|"HTTP POST /api/generate"| OL
+    OL -->|"コーデ提案テキスト"| LLS
+    LLS -->|"LLMレスポンス"| OS
+    OS -->|"ビジネスver / 休暇ver"| LS
+
+    LNC -->|"トークン / ユーザーID"| LS
+    UC -->|"名前"| LS
+    LS -->|"HTTP POST /v2/bot/message/push"| LA
+    LA -->|"Push通知"| LN
+
+    style Scheduler fill:#fff3cd,stroke:#ffc107
+    style Config fill:#d1ecf1,stroke:#17a2b8
+    style Services fill:#d4edda,stroke:#28a745
+    style External fill:#f8d7da,stroke:#dc3545
+    style Utils fill:#e2d9f3,stroke:#6f42c1
